@@ -7,6 +7,8 @@ from sonata.reports.spike_trains import SpikeTrains
 import pygenn
 import matplotlib.pyplot as plt
 import pickle
+from tqdm import tqdm
+import copy
 
 GLIF3 = pygenn.genn_model.create_custom_neuron_class(
     "GLIF3",
@@ -92,10 +94,16 @@ def spikes_list_to_start_end_times(spikes_list):
 
 
 def get_dynamics_params(dynamics_path, sim_config):
-    with open(dynamics_path) as f:
-        old_dynamics_params = json.load(f)
-
-    DT = sim_config["run"]["dt"]
+    if dynamics_path != "_":
+        with open(dynamics_path) as f:
+            old_dynamics_params = json.load(f)
+    else:
+        dynamics_params_renamed = {}
+        return dynamics_params_renamed
+    if type(sim_config) is type(dict()):
+        DT = copy.deepcopy(sim_config["run"]["dt"])
+    elif type(sim_config) is type(float()):
+        DT = sim_config
     asc_decay = np.array(old_dynamics_params["k"])
     r = np.array([1.0, 1.0])  # NEST default
     t_ref = old_dynamics_params["t_ref"]
@@ -177,18 +185,12 @@ def construct_populations(
 
 
 def construct_synapses(
-    model,
-    syn_dict,
-    pop1,
-    pop2,
-    edge_df,
-    sim_config,
-    dynamics_params,
+    model, syn_dict, pop1, pop2, edge_df, sim_config, dynamics_params,
 ):
 
     all_nsyns = edge_df["nsyns"].unique()
     all_edge_type_ids = edge_df["edge_type_id"].unique()
-    print(all_edge_type_ids)
+    # all_edge_type_ids)
     for edge_type_id in all_edge_type_ids:
         for nsyns in all_nsyns:
 
@@ -408,15 +410,14 @@ def construct_id_conversion_df(
     else:
         num_edges = len(edges)
         edges_for_df = []
-        for i, e in enumerate(edges):
+        for (i, e) in tqdm(enumerate(edges)):
 
             # Print status
             if i % 1000 == 0:
                 print(
                     "Constructing id conversion df: {}%".format(
-                        np.round(i / num_edges * 100)
-                    ),
-                    end="\r",
+                        np.round(i / num_edges * 100) + str("\n")
+                    )
                 )
 
             e_dict = {}
@@ -508,11 +509,14 @@ def make_synapse_data(arg_list):
     # if len(s_list) == 0:
 
     # Get delay and weight specific to the edge_type_id
-    delay_steps = int(
-        src_tgt_id_nsyns["delay"].iloc[0] / DT
-    )  # delay (ms) -> delay (steps)
-    weight = src_tgt_id_nsyns["syn_weight"].iloc[0] / 1e3 * nsyns
-
+    try:
+        delay_steps = int(
+            src_tgt_id_nsyns["delay"].iloc[0] / DT
+        )  # delay (ms) -> delay (steps)
+        weight = src_tgt_id_nsyns["syn_weight"].iloc[0] / 1e3 * nsyns
+    except:
+        weight = 0.0
+    # print(weight)
     # dynamics_file = node_df.loc[node_df["model_name"] == pop2][
     #     "dynamics_params"
     # ].unique()
@@ -522,26 +526,31 @@ def make_synapse_data(arg_list):
     # dynamics_path = Path(DYNAMICS_BASE_DIR, dynamics_file)
 
     dynamics_params = get_dynamics_params(dynamics_path, DT)
-    dynamics_params["tau"]
+    if len(dynamics_params):
+        if "tau" in dynamics_params.keys():
+            tau = dynamics_params["tau"]
 
-    # Save as pickle
-    data = [
-        pop1,
-        pop2,
-        nsyns,
-        edge_type_id,
-        delay_steps,
-        weight,
-        s_list,
-        t_list,
-        tau,
-    ]
+        # Save as pickle
+        data = [
+            pop1,
+            pop2,
+            nsyns,
+            edge_type_id,
+            delay_steps,
+            weight,
+            s_list,
+            t_list,
+            tau,
+        ]
 
-    pop1_pop2_edgetypeid_nsyns_path = Path(
-        "./pkl_data/synapses/{}_{}_{}_{}.pkl".format(pop1, pop2, edge_type_id, nsyns)
-    )
-    if pop1_pop2_edgetypeid_nsyns_path.parent.exists() == False:
-        Path.mkdir(pop1_pop2_edgetypeid_nsyns_path.parent, parents=True)
+        pop1_pop2_edgetypeid_nsyns_path = Path(
+            "./pkl_data/synapses/{}_{}_{}_{}.pkl".format(
+                pop1, pop2, edge_type_id, nsyns
+            )
+        )
+        if pop1_pop2_edgetypeid_nsyns_path.parent.exists() == False:
+            Path.mkdir(pop1_pop2_edgetypeid_nsyns_path.parent, parents=True)
 
-    with open(pop1_pop2_edgetypeid_nsyns_path, "wb") as f:
-        pickle.dump(data, f)
+        with open(pop1_pop2_edgetypeid_nsyns_path, "wb") as f:
+            pickle.dump(data, f)
+    dynamics_params

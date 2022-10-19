@@ -8,9 +8,10 @@ from sonata.reports.spike_trains import SpikeTrains
 import pygenn
 import matplotlib.pyplot as plt
 import multiprocessing
-from utilities import make_synapse_data
 from tqdm import tqdm
+import copy
 
+from utilities import make_synapse_data
 from utilities import (
     GLIF3,
     get_dynamics_params,
@@ -31,22 +32,22 @@ if russell:
     SIM_CONFIG_PATH = Path("./../config.json")
     LGN_V1_EDGE_CSV = Path("./../network/lgn_v1_edge_types.csv")
     V1_EDGE_CSV = Path("./../network/v1_v1_edge_types.csv")
-    
+
     ##
     #
     ##
-    
+
     LGN_SPIKES_PATH = Path(
         "../inputs/full3_GScorrected_PScorrected_3.0sec_SF0.04_TF2.0_ori270.0_c100.0_gs0.5_spikes.trial_0.h5"
     )
-    
+
     LGN_NODE_DIR = Path("./../network/lgn_node_types.csv")
     V1_NODE_CSV = Path("./../network/v1_node_types.csv")
     V1_ID_CONVERSION_FILENAME = Path(".", "pkl_data", "v1_edge_df.pkl")
     LGN_ID_CONVERSION_FILENAME = Path(".", "pkl_data", "lgn_edge_df.pkl")
     BKG_V1_EDGE_CSV = Path("./../network/bkg_v1_edge_types.csv")
     BKG_ID_CONVERSION_FILENAME = Path(".", "pkl_data", "bkg_edge_df.pkl")
-    
+
 else:
     DYNAMICS_BASE_DIR = Path("./../models/cell_models/nest_2.14_models")
     SIM_CONFIG_PATH = Path("./../config.json")
@@ -66,10 +67,7 @@ num_steps = 300000
 
 
 v1_net = File(
-    data_files=[
-        "../network/v1_nodes.h5",
-        "../network/v1_v1_edges.h5",
-    ],
+    data_files=["../network/v1_nodes.h5", "../network/v1_v1_edges.h5",],
     data_type_files=[
         "../network/v1_node_types.csv",
         "../network/v1_v1_edge_types.csv",
@@ -77,10 +75,7 @@ v1_net = File(
 )
 
 lgn_net = File(
-    data_files=[
-        "../network/lgn_nodes.h5",
-        "../network/lgn_v1_edges.h5",
-    ],
+    data_files=["../network/lgn_nodes.h5", "../network/lgn_v1_edges.h5",],
     data_type_files=[
         "../network/lgn_node_types.csv",
         "../network/lgn_v1_edge_types.csv",
@@ -88,10 +83,7 @@ lgn_net = File(
 )
 
 bkg_net = File(
-    data_files=[
-        "../network/bkg_nodes.h5",
-        "../network/bkg_v1_edges.h5",
-    ],
+    data_files=["../network/bkg_nodes.h5", "../network/bkg_v1_edges.h5",],
     data_type_files=[
         "../network/bkg_node_types.csv",
         "../network/bkg_v1_edge_types.csv",
@@ -108,7 +100,7 @@ print("Contains edges: {}".format(lgn_net.has_edges))
 with open(SIM_CONFIG_PATH) as f:
     sim_config = json.load(f)
 model = pygenn.genn_model.GeNNModel(backend="CUDA")
-model.dT = sim_config["run"]["dt"]
+model.dT = copy.deepcopy(sim_config["run"]["dt"])
 
 ### Construct v1 neuron populations ###
 v1_node_types_df = pd.read_csv(V1_NODE_CSV, sep=" ")
@@ -264,7 +256,6 @@ print("Added BKG")
 syn_dict = {}
 
 
-
 v1_edge_df_path = Path("./pkl_data/v1_edge_df.pkl")
 if v1_edge_df_path.exists():
     with open(v1_edge_df_path, "rb") as f:
@@ -346,14 +337,9 @@ def make_src_tgt_df(arg_list):
     # Save as pickle
     if src_tgt_path.parent.exists() == False:
         Path.mkdir(src_tgt_path.parent, parents=True)
-    else:
-        pass
 
     with open(src_tgt_path, "wb") as f:
         pickle.dump(src_tgt, f)
-
-    print(src_tgt_path,src_tgt)
-
 
 
 items = []
@@ -364,15 +350,9 @@ for pop1 in all_model_names:
             items.append((pop1, pop2, edge_df, src_tgt_path))
 
 try:
-    #map(make_src_tgt_df, items)
-
-    with multiprocessing.Pool(4,maxtasksperchild=5) as pool:
-        list(tqdm(pool.imap_unordered(make_src_tgt_df, items), total=len(tasks)))         
-
+    with multiprocessing.Pool(8, maxtasksperchild=8) as pool:
+        list(tqdm(pool.imap_unordered(make_src_tgt_df, items), total=len(items)))
 except:
-    #with multiprocessing.Pool(4,maxtasksperchild=5) as pool:
-    #    pool.map(make_src_tgt_df, items), total=len(tasks)))        
-
     list(tqdm(map(make_src_tgt_df, items), total=len(items)))
 
 print("complete src tgt build")
@@ -381,13 +361,11 @@ df = edge_df.drop_duplicates(
     subset=["edge_type_id", "nsyns", "source_model_name", "target_model_name"]
 )
 # Add DT
-df["DT"] = sim_config["run"]["dt"]
+df["DT"] = copy.deepcopy(sim_config["run"]["dt"])
 df["dynamics_path"] = "_"
 
-# Add dynamics file
-for i in range(len(df)):
-    if i % 1000 == 0:
-        print(i)
+print("Add dynamics file")
+for i in tqdm(range(len(df))):
     target = df.iloc[0]["target_model_name"]
     dynamics_file = v1_node_df.loc[v1_node_df["model_name"] == target][
         "dynamics_params"
@@ -409,24 +387,22 @@ items = df[
 
 
 try:
-    #map(make_synapse_data,items)
-    with multiprocessing.Pool(4,maxtasksperchild=5) as pool:
-        list(tqdm(pool.imap_unordered(make_synapse_data, items), total=len(tasks)))
-    #with multiprocessing.ParallelPool() as pool:
-    #   pool.map(make_synapse_data, items)
+    with multiprocessing.Pool(8, maxtasksperchild=8) as pool:
+        list(tqdm(pool.imap_unordered(make_synapse_data, items), total=len(items)))
+
 except:
-    list(tqdm.tqdm(map(make_synapse_data, items), total=len(items)))
 
+    list(map(make_synapse_data, items))
 
-
-    #with multiprocessing.Pool(4,maxtasksperchild=5) as pool:
-    #    pool.map(make_synapse_data, items)
 
 print("complete synapse build")
 
 node_df = v1_node_df
 count = -1
-for pop1 in v1_model_names:
+
+print("building v1")
+
+for pop1 in tqdm(v1_model_names):
     for pop2 in v1_model_names:
 
         # Print progress
@@ -435,7 +411,7 @@ for pop1 in v1_model_names:
             "Progress = {}% - {} to {}".format(
                 np.round(100 * count / len(v1_model_names) ** 2, 4), pop1, pop2
             ),
-            end="\r",
+            end="\n",
         )
 
         dynamics_file = node_df.loc[node_df["model_name"] == pop2][
@@ -490,7 +466,10 @@ lgn_syn_df = pd.read_csv(LGN_V1_EDGE_CSV, sep=" ")
 lgn_edge_type_ids = lgn_syn_df["edge_type_id"].tolist()
 lgn_all_nsyns = lgn_edge_df["nsyns"].unique()
 lgn_all_nsyns.sort()
-for pop1 in lgn_model_names:
+
+print("building lgn and v1")
+
+for pop1 in lgn_tqdm(model_names):
     for pop2 in v1_model_names:
 
         # Dynamics for v1, since this is the target
@@ -525,7 +504,7 @@ s_ini = {"g": weight}
 psc_Alpha_params = {"tau": dynamics_params["tau"]}  # TODO: Always 0th port?
 psc_Alpha_init = {"x": 0.0}
 pop1 = BKG_name
-for pop2 in v1_model_names:
+for pop2 in tqdm(v1_model_names):
     synapse_group_name = pop1 + "_to_" + pop2 + "_nsyns_" + str(nsyns)
     syn_dict[synapse_group_name] = model.add_synapse_population(
         pop_name=synapse_group_name,
@@ -551,13 +530,12 @@ for pop2 in v1_model_names:
     print("Synapses added for {} -> {} with nsyns={}".format(pop1, pop2, nsyns))
 
 
-
 ### Run simulation ###
 model.build(force_rebuild=True)
 model.load(
     num_recording_timesteps=NUM_RECORDING_TIMESTEPS
 )  # TODO: How big to calculate for GPU size?
-#1
+# 1
 
 # Construct data for spike times
 spike_data = {}
@@ -568,8 +546,7 @@ for model_name in v1_model_names:
         spike_data[model_name][i] = []  # List of spike times for each neuron
 
 
-
-#for i in tqdm(range(10000)):
+# for i in tqdm(range(10000)):
 for i in tqdm(range(num_steps)):
 
     model.step_time()
@@ -578,7 +555,7 @@ for i in tqdm(range(num_steps)):
     if i % NUM_RECORDING_TIMESTEPS == 0 and i != 0:
 
         # Record spikes
-        print(i)
+        # print(i)
         model.pull_recording_buffers_from_device()
         for model_name in v1_model_names:
             pop = pop_dict[model_name]
