@@ -339,7 +339,7 @@ all_model_names = list(set(source_model_names) | set(target_model_names))
 
 
 def make_src_tgt_df(arg_list):
-    (pop1, pop2, edge_df) = arg_list
+    (pop1, pop2, edge_df, src_tgt_path) = arg_list
     src_tgt = edge_df.loc[
         (edge_df["source_model_name"] == pop1) & (edge_df["target_model_name"] == pop2)
     ]
@@ -352,7 +352,7 @@ def make_src_tgt_df(arg_list):
     with open(src_tgt_path, "wb") as f:
         pickle.dump(src_tgt, f)
 
-    #print(src_tgt_path)
+    print(src_tgt_path,src_tgt)
 
 
 
@@ -361,19 +361,19 @@ for pop1 in all_model_names:
     for pop2 in all_model_names:
         src_tgt_path = Path("./pkl_data/src_tgt/{}_{}.pkl".format(pop1, pop2))
         if src_tgt_path.exists() == False:
-            items.append((pop1, pop2, edge_df))
+            items.append((pop1, pop2, edge_df, src_tgt_path))
 
 try:
     #map(make_src_tgt_df, items)
-    list(tqdm(map(make_src_tgt_df, items), total=len(items)))
+
+    with multiprocessing.Pool(4,maxtasksperchild=5) as pool:
+        list(tqdm(pool.imap_unordered(make_src_tgt_df, items), total=len(tasks)))         
 
 except:
     #with multiprocessing.Pool(4,maxtasksperchild=5) as pool:
     #    pool.map(make_src_tgt_df, items), total=len(tasks)))        
 
-
-    with multiprocessing.Pool(4,maxtasksperchild=5) as pool:
-        list(tqdm(pool.imap_unordered(make_src_tgt_df, items), total=len(tasks)))         
+    list(tqdm(map(make_src_tgt_df, items), total=len(items)))
 
 print("complete src tgt build")
 
@@ -410,14 +410,14 @@ items = df[
 
 try:
     #map(make_synapse_data,items)
-    list(tqdm.tqdm(map(make_synapse_data, items), total=len(items)))
-
+    with multiprocessing.Pool(4,maxtasksperchild=5) as pool:
+        list(tqdm(pool.imap_unordered(make_synapse_data, items), total=len(tasks)))
     #with multiprocessing.ParallelPool() as pool:
     #   pool.map(make_synapse_data, items)
 except:
+    list(tqdm.tqdm(map(make_synapse_data, items), total=len(items)))
 
-    with multiprocessing.Pool(4,maxtasksperchild=5) as pool:
-        list(tqdm(pool.imap_unordered(make_synapse_data, items), total=len(tasks)))
+
 
     #with multiprocessing.Pool(4,maxtasksperchild=5) as pool:
     #    pool.map(make_synapse_data, items)
