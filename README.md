@@ -2,6 +2,13 @@
 
 
 ## A GPU-accelerated Model of the Mouse Primary Visual Cortex
+### Getting Started
+Install GeNN, PyGeNN. Download an Allen Brain Dropbox directory: 
+### Entry point
+```bash
+python run_simulation.py
+```
+
 
 
 
