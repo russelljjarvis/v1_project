@@ -188,7 +188,7 @@ def construct_synapses(
 
     all_nsyns = edge_df["nsyns"].unique()
     all_edge_type_ids = edge_df["edge_type_id"].unique()
-
+    print(all_edge_type_ids)
     for edge_type_id in all_edge_type_ids:
         for nsyns in all_nsyns:
 

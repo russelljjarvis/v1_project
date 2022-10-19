@@ -7,6 +7,10 @@ from sonata.circuit import File
 from sonata.reports.spike_trains import SpikeTrains
 import pygenn
 import matplotlib.pyplot as plt
+import multiprocessing
+from utilities import make_synapse_data
+from tqdm import tqdm
+
 from utilities import (
     GLIF3,
     get_dynamics_params,
@@ -20,53 +24,77 @@ from utilities import (
 )
 import pickle
 
-DYNAMICS_BASE_DIR = Path("./GLIF Network/models/cell_models/nest_2.14_models")
-SIM_CONFIG_PATH = Path("./GLIF Network/config.json")
-LGN_V1_EDGE_CSV = Path("./GLIF Network/network/lgn_v1_edge_types.csv")
-V1_EDGE_CSV = Path("./GLIF Network/network/v1_v1_edge_types.csv")
-LGN_SPIKES_PATH = Path(
-    "GLIF Network/inputs/full3_GScorrected_PScorrected_3.0sec_SF0.04_TF2.0_ori270.0_c100.0_gs0.5_spikes.trial_0.h5"
-)
-LGN_NODE_DIR = Path("./GLIF Network/network/lgn_node_types.csv")
-V1_NODE_CSV = Path("./GLIF Network/network/v1_node_types.csv")
-V1_ID_CONVERSION_FILENAME = Path(".", "pkl_data", "v1_edge_df.pkl")
-LGN_ID_CONVERSION_FILENAME = Path(".", "pkl_data", "lgn_edge_df.pkl")
-BKG_V1_EDGE_CSV = Path("./GLIF Network/network/bkg_v1_edge_types.csv")
-BKG_ID_CONVERSION_FILENAME = Path(".", "pkl_data", "bkg_edge_df.pkl")
+print(spikes_list_to_start_end_times)
+russell = True
+if russell:
+    DYNAMICS_BASE_DIR = Path("./../models/cell_models/nest_2.14_models")
+    SIM_CONFIG_PATH = Path("./../config.json")
+    LGN_V1_EDGE_CSV = Path("./../network/lgn_v1_edge_types.csv")
+    V1_EDGE_CSV = Path("./../network/v1_v1_edge_types.csv")
+    
+    ##
+    #
+    ##
+    
+    LGN_SPIKES_PATH = Path(
+        "../inputs/full3_GScorrected_PScorrected_3.0sec_SF0.04_TF2.0_ori270.0_c100.0_gs0.5_spikes.trial_0.h5"
+    )
+    
+    LGN_NODE_DIR = Path("./../network/lgn_node_types.csv")
+    V1_NODE_CSV = Path("./../network/v1_node_types.csv")
+    V1_ID_CONVERSION_FILENAME = Path(".", "pkl_data", "v1_edge_df.pkl")
+    LGN_ID_CONVERSION_FILENAME = Path(".", "pkl_data", "lgn_edge_df.pkl")
+    BKG_V1_EDGE_CSV = Path("./../network/bkg_v1_edge_types.csv")
+    BKG_ID_CONVERSION_FILENAME = Path(".", "pkl_data", "bkg_edge_df.pkl")
+    
+else:
+    DYNAMICS_BASE_DIR = Path("./../models/cell_models/nest_2.14_models")
+    SIM_CONFIG_PATH = Path("./../config.json")
+    LGN_V1_EDGE_CSV = Path("./../network/lgn_v1_edge_types.csv")
+    V1_EDGE_CSV = Path("./../network/v1_v1_edge_types.csv")
+    LGN_SPIKES_PATH = Path(
+        "../inputs/full3_GScorrected_PScorrected_3.0sec_SF0.04_TF2.0_ori270.0_c100.0_gs0.5_spikes.trial_0.h5"
+    )
+    LGN_NODE_DIR = Path("./../network/lgn_node_types.csv")
+    V1_NODE_CSV = Path("./../network/v1_node_types.csv")
+    V1_ID_CONVERSION_FILENAME = Path(".", "pkl_data", "v1_edge_df.pkl")
+    LGN_ID_CONVERSION_FILENAME = Path(".", "pkl_data", "lgn_edge_df.pkl")
+    BKG_V1_EDGE_CSV = Path("./../network/bkg_v1_edge_types.csv")
+    BKG_ID_CONVERSION_FILENAME = Path(".", "pkl_data", "bkg_edge_df.pkl")
 NUM_RECORDING_TIMESTEPS = 10000
 num_steps = 300000
 
 
 v1_net = File(
     data_files=[
-        "GLIF Network/network/v1_nodes.h5",
-        "GLIF Network/network/v1_v1_edges.h5",
+        "../network/v1_nodes.h5",
+        "../network/v1_v1_edges.h5",
     ],
     data_type_files=[
-        "GLIF Network/network/v1_node_types.csv",
-        "GLIF Network/network/v1_v1_edge_types.csv",
+        "../network/v1_node_types.csv",
+        "../network/v1_v1_edge_types.csv",
     ],
 )
 
 lgn_net = File(
     data_files=[
-        "GLIF Network/network/lgn_nodes.h5",
-        "GLIF Network/network/lgn_v1_edges.h5",
+        "../network/lgn_nodes.h5",
+        "../network/lgn_v1_edges.h5",
     ],
     data_type_files=[
-        "GLIF Network/network/lgn_node_types.csv",
-        "GLIF Network/network/lgn_v1_edge_types.csv",
+        "../network/lgn_node_types.csv",
+        "../network/lgn_v1_edge_types.csv",
     ],
 )
 
 bkg_net = File(
     data_files=[
-        "GLIF Network/network/bkg_nodes.h5",
-        "GLIF Network/network/bkg_v1_edges.h5",
+        "../network/bkg_nodes.h5",
+        "../network/bkg_v1_edges.h5",
     ],
     data_type_files=[
-        "GLIF Network/network/bkg_node_types.csv",
-        "GLIF Network/network/bkg_v1_edge_types.csv",
+        "../network/bkg_node_types.csv",
+        "../network/bkg_v1_edge_types.csv",
     ],
 )
 
@@ -85,37 +113,6 @@ model.dT = sim_config["run"]["dt"]
 ### Construct v1 neuron populations ###
 v1_node_types_df = pd.read_csv(V1_NODE_CSV, sep=" ")
 v1_nodes = v1_net.nodes["v1"]
-# v1_dynamics_files = v1_node_types_df["dynamics_params"].to_list()
-
-# # Add model names column to handle duplicate pop_names (with different dynamics params)
-# model_column = ["_" for _ in range(v1_node_types_df.shape[0])]
-# v1_node_types_df["model_name"] = model_column
-# for i in range(v1_node_types_df.shape[0]):
-#     suffix = 0
-#     pop_name = v1_node_types_df.iloc[i]["pop_name"]
-#     while True:
-#         new_name = pop_name + "_" + str(suffix)
-#         if new_name not in v1_node_types_df["model_name"].tolist():
-#             break
-#         suffix += 1
-
-#     v1_node_types_df["model_name"][i] = new_name
-
-
-# v1_model_names = v1_node_types_df["model_name"].to_list()
-# v1_node_dict = {}
-# for i, dynamics_file in enumerate(v1_dynamics_files):
-#     print(i, end="\r")
-#     v1_nodes_with_model_name = [
-#         n["node_id"] for n in v1_nodes.filter(dynamics_params=dynamics_file)
-#     ]
-#     v1_node_dict[v1_model_names[i]] = v1_nodes_with_model_name
-
-# for i, _ in enumerate(v1_nodes.filter(dynamics_params=dynamics_file)):
-#     print(i)
-
-# for i, type_id in enumerate(np.unique(v1_nodes.type_ids)):
-#     v1_node_dict[type_id] = [n for n in v1_nodes.filter(node_type_id=type_id)]
 
 v1_node_df_path = Path("./pkl_data/v1_node_df.pkl")
 if v1_node_df_path.exists():
@@ -204,14 +201,6 @@ else:
 
 lgn_model_names = lgn_node_df["model_name"].unique()
 
-# lgn_model_names = lgn_node_types_df["model_type"].to_list()
-# lgn_node_dict = {}
-# for i, lgn_model_name in enumerate(lgn_model_names):
-#     nodes_with_model_name = [
-#         n["node_id"] for n in lgn_nodes.filter(model_type=lgn_model_name)
-#     ]
-#     lgn_node_dict[lgn_model_names[i]] = nodes_with_model_name
-
 spikes_path = Path("./pkl_data/spikes.pkl")
 if spikes_path.exists():
     with open(spikes_path, "rb") as f:
@@ -242,16 +231,6 @@ else:
 
 (start_spike, end_spike, spike_times) = spikes
 
-# # Read LGN spike times
-# spikes = SpikeTrains.from_sonata(LGN_SPIKES_PATH)
-# spikes_df = spikes.to_dataframe()
-# lgn_spiking_nodes = spikes_df["node_ids"].unique().tolist()
-# spikes_list = []
-# for n in lgn_spiking_nodes:
-#     spikes_list.append(spikes_df[spikes_df["node_ids"] == n]["timestamps"].to_list())
-# start_spike, end_spike, spike_times = spikes_list_to_start_end_times(
-#     spikes_list
-# )  # Convert to GeNN format
 
 # Add population
 for i, lgn_model_name in enumerate(lgn_model_names):
@@ -284,22 +263,6 @@ print("Added BKG")
 ### Construct v1 to v1 synapses ###
 syn_dict = {}
 
-# First create a dict that maps the NEST node_id to the GeNN node_id. NEST numbers the neurons from 0 to num_neurons, whereas GeNN numbers neurons 0 to num_neurons_per_population. This matters when assigning synapses.
-# v1_node_to_pop_idx = {}
-# v1_pop_counts = {}
-# for n in v1_nodes:
-#     model_name = n["model_name"]
-#     if model_name in v1_pop_counts.keys():
-#         v1_pop_counts[model_name] += 1
-#     else:
-#         v1_pop_counts[model_name] = 0
-#     pop_idx = v1_pop_counts[model_name]
-#     node_id = n["node_id"]
-#     v1_node_to_pop_idx[node_id] = [model_name, pop_idx]
-
-# # +1 so that pop_counts == num_neurons
-# for k in v1_pop_counts.keys():
-#     v1_pop_counts[k] += 1
 
 
 v1_edge_df_path = Path("./pkl_data/v1_edge_df.pkl")
@@ -369,56 +332,10 @@ else:
     with open(v1_edge_df_path, "wb") as f:
         pickle.dump(v1_edge_df, f)
 
-    # for i, node_id in enumerate(node_df["node_id"].tolist()):
-    #     node_id = np.array(node_id, dtype="uint64")
-    #     GeNN_id = node_df.loc[node_df["node_id"] == node_id, "GeNN_id"].iloc[0]
-    #     node_model_name = node_df.loc[node_df["node_id"] == node_id, "model_name"].iloc[0]
-    #     # TODO: Why is this crashing
-    #     edge_df.loc[
-    #         edge_df["source_node_id"] == node_id, "source_model_name"
-    #     ] = node_model_name
-    #     edge_df.loc[edge_df["source_node_id"] == node_id, "source_GeNN_id"] = GeNN_id
-    #     edge_df.loc[
-    #         edge_df["target_node_id"] == node_id, "target_model_name"
-    #     ] = node_model_name
-    #     edge_df.loc[edge_df["target_node_id"] == node_id, "target_GeNN_id"] = GeNN_id
-    #     # print progress
-    #     if i % 10 == 0:
-    #         print("Progress: {}%".format(np.round(i / num_edges * 100, 10)), end="\r")
-    # Mapping from BMTK node_id to GeNN model name and GeNN
-
-
-# v1_edge_df = construct_id_conversion_df(
-#     edges=v1_edges,
-#     all_model_names=v1_model_names,
-#     source_node_to_pop_idx_dict=v1_node_to_pop_idx,
-#     target_node_to_pop_idx_dict=v1_node_to_pop_idx,
-#     filename=V1_ID_CONVERSION_FILENAME,
-# )
-# v1_syn_df = pd.read_csv(V1_EDGE_CSV, sep=" ")
-# v1_edge_type_ids = v1_syn_df["edge_type_id"].tolist()
-# v1_all_nsyns = v1_edge_df["nsyns"].unique()
-# v1_all_nsyns.sort()
-# def generate_source_target_df(node_df):
 edge_df = v1_edge_df
 source_model_names = edge_df["source_model_name"].unique().tolist()
 target_model_names = edge_df["target_model_name"].unique().tolist()
 all_model_names = list(set(source_model_names) | set(target_model_names))
-# for pop1 in all_model_names:
-#     for pop2 in all_model_names:
-
-#         src_tgt_path = Path("./pkl_data/src_tgt/{}_{}.pkl".format(pop1, pop2))
-#         if src_tgt_path.exists() == False:
-#             src_tgt = edge_df.loc[
-#                 (edge_df["source_model_name"] == pop1)
-#                 & (edge_df["target_model_name"] == pop2)
-#             ]
-#         # Save as pickle
-#         if src_tgt_path.parent.exists() == False:
-#             Path.mkdir(src_tgt_path.parent, parents=True)
-
-#         with open(src_tgt_path, "wb") as f:
-#             pickle.dump(src_tgt, f)
 
 
 def make_src_tgt_df(arg_list):
@@ -429,25 +346,36 @@ def make_src_tgt_df(arg_list):
     # Save as pickle
     if src_tgt_path.parent.exists() == False:
         Path.mkdir(src_tgt_path.parent, parents=True)
+    else:
+        pass
 
     with open(src_tgt_path, "wb") as f:
         pickle.dump(src_tgt, f)
 
-    print(src_tgt_path)
+    #print(src_tgt_path)
 
 
-import multiprocessing
 
 items = []
 for pop1 in all_model_names:
     for pop2 in all_model_names:
         src_tgt_path = Path("./pkl_data/src_tgt/{}_{}.pkl".format(pop1, pop2))
         if src_tgt_path.exists() == False:
-            items.append(pop1, pop2, edge_df)
+            items.append((pop1, pop2, edge_df))
 
-with multiprocessing.Pool() as pool:
-    pool.map(make_src_tgt_df, items)
+try:
+    #map(make_src_tgt_df, items)
+    list(tqdm(map(make_src_tgt_df, items), total=len(items)))
 
+except:
+    #with multiprocessing.Pool(4,maxtasksperchild=5) as pool:
+    #    pool.map(make_src_tgt_df, items), total=len(tasks)))        
+
+
+    with multiprocessing.Pool(4,maxtasksperchild=5) as pool:
+        list(tqdm(pool.imap_unordered(make_src_tgt_df, items), total=len(tasks)))         
+
+print("complete src tgt build")
 
 df = edge_df.drop_duplicates(
     subset=["edge_type_id", "nsyns", "source_model_name", "target_model_name"]
@@ -480,16 +408,21 @@ items = df[
 #
 
 
-from utilities import make_synapse_data
+try:
+    #map(make_synapse_data,items)
+    list(tqdm.tqdm(map(make_synapse_data, items), total=len(items)))
 
-with multiprocessing.Pool() as pool:
-    pool.map(make_synapse_data, items)
+    #with multiprocessing.ParallelPool() as pool:
+    #   pool.map(make_synapse_data, items)
+except:
 
-# all_pop_names = set(
-#     edge_df["source_model_name"].unique().tolist()
-#     + edge_df["target_model_name"].unique().tolist(),
-# )
+    with multiprocessing.Pool(4,maxtasksperchild=5) as pool:
+        list(tqdm(pool.imap_unordered(make_synapse_data, items), total=len(tasks)))
 
+    #with multiprocessing.Pool(4,maxtasksperchild=5) as pool:
+    #    pool.map(make_synapse_data, items)
+
+print("complete synapse build")
 
 node_df = v1_node_df
 count = -1
@@ -617,45 +550,6 @@ for pop2 in v1_model_names:
     )
     print("Synapses added for {} -> {} with nsyns={}".format(pop1, pop2, nsyns))
 
-### This commented out section is hard to run on this smaller dataset of 450 neurons because there is no bkg_nodes.h5 file for this dataset. Trying to copy the one from the Billeh dataset doesn't work, as it uses populations of neurons with different names.
-# bkg_node_to_pop_idx = {0: [BKG_name, 0]}
-# bkg_edges = bkg_net.edges["bkg_to_v1"].get_group(0)
-# bkg_edge_df = construct_id_conversion_df(
-#     edges=bkg_edges,
-#     all_model_names=v1_model_names,
-#     source_node_to_pop_idx_dict=bkg_node_to_pop_idx,
-#     target_node_to_pop_idx_dict=v1_node_to_pop_idx,
-#     filename=BKG_ID_CONVERSION_FILENAME,
-# )
-
-# pop1 = BKG_name
-# bkg_syn_df = pd.read_csv(BKG_V1_EDGE_CSV, sep=" ")
-# bkg_edge_type_ids = bkg_syn_df["edge_type_id"].tolist()
-# bkg_all_nsyns = bkg_edge_df["nsyns"].unique()
-# bkg_all_nsyns.sort()
-
-# for pop2 in v1_model_names:
-
-#     # Dynamics for v1, since this is the target
-#     dynamics_params, _ = get_dynamics_params(
-#         node_types_df=v1_node_types_df,
-#         dynamics_base_dir=DYNAMICS_BASE_DIR,
-#         sim_config=sim_config,
-#         node_dict=v1_node_dict,
-#         model_name=pop2,  # Pop2 is target, used for dynamics_params (tau)
-#     )
-#     syn_dict = construct_synapses(
-#         model=model,
-#         syn_dict=syn_dict,
-#         pop1=pop1,
-#         pop2=pop2,
-#         all_edge_type_ids=bkg_edge_type_ids,
-#         all_nsyns=bkg_all_nsyns,
-#         edge_df=bkg_syn_df,
-#         syn_df=bkg_syn_df,
-#         sim_config=sim_config,
-#         dynamics_params=dynamics_params,
-#     )
 
 
 ### Run simulation ###
@@ -663,7 +557,7 @@ model.build(force_rebuild=True)
 model.load(
     num_recording_timesteps=NUM_RECORDING_TIMESTEPS
 )  # TODO: How big to calculate for GPU size?
-1
+#1
 
 # Construct data for spike times
 spike_data = {}
@@ -674,7 +568,9 @@ for model_name in v1_model_names:
         spike_data[model_name][i] = []  # List of spike times for each neuron
 
 
-for i in range(num_steps):
+
+#for i in tqdm(range(10000)):
+for i in tqdm(range(num_steps)):
 
     model.step_time()
 
