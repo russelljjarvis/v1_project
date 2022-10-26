@@ -6,6 +6,9 @@ from sonata.circuit import File
 from sonata.reports.spike_trains import SpikeTrains
 import pygenn
 import matplotlib.pyplot as plt
+
+import os
+
 from helper import (
     optimize_nodes_df_memory,
     optimize_edges_df_memory,
@@ -15,6 +18,8 @@ from helper import (
     save_df,
     psc_Alpha,
 )
+
+os.system("wget https://www.dropbox.com/sh/w5u31m3hq6u2x5m/AABTdY1y333DbIwpzs7k0BIKa/GLIF%20Network?dl=1")
 
 v1_net = File(
     data_files=[
